@@ -5,14 +5,20 @@ import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.List;
 
 public class DrawPanel extends JPanel implements MouseListener, MouseMotionListener, MouseWheelListener {
     private ArrayList<Line> lines = new ArrayList<>();
     private ScreenConverter sc = new ScreenConverter(-2, 2, 4, 4, 800, 600);
     private Line yAxis = new Line(0, -1, 0, 1);
     private Line xAxis = new Line(-1, 0, 1, 0);
+
     private ScreenPoint prevDrag;
     private Line currentLine;
+    private int x = 0, y = 0;
+    private List<Triangle> triangles = new ArrayList<>();
+    private Figure figure = new Figure();
+    private boolean finish = true;
 
     @Override
     public void mouseWheelMoved(MouseWheelEvent e) {
@@ -47,12 +53,61 @@ public class DrawPanel extends JPanel implements MouseListener, MouseMotionListe
 
     @Override
     public void mouseMoved(MouseEvent e) {
-
+        x = e.getX();
+        y = e.getY();
+        repaint();
     }
+
+    private void drawTriangle(LineDrawer ld) {
+        drawLine(ld, xAxis);
+        drawLine(ld, yAxis);
+        drawCompletedTriangles(ld);
+        drawLastTriangle(ld);
+
+        drawFigure(ld);
+    }
+
+    private void drawFigure(LineDrawer ld) {
+        List<RealPoint> points = figure.getPoints();
+        for (int i = 0; i < points.size() - 1; i++) {
+            ScreenPoint sp = sc.r2s(points.get(i));
+            ScreenPoint sp2 = sc.r2s(points.get(i + 1));
+            ld.drawLine(sp, sp2, Color.RED);
+        }
+        if (points.size() != 0) {
+            ScreenPoint sp1 = sc.r2s(points.get(0));
+            ScreenPoint sp3 = sc.r2s(points.get(points.size() - 1));
+            ld.drawLine(sp1, sp3, Color.RED);
+        }
+    }
+
+    private int countPoints = 0;
 
     @Override
     public void mouseClicked(MouseEvent e) {
-        // prevDrag = new ScreenPoint(e.getX(), e.getY());
+        if (e.getButton() == MouseEvent.BUTTON1) {
+            x = e.getX(); y = e.getY();
+            if (finish) {
+                countPoints++;
+                triangles.add(new Triangle());
+                finish = false;
+            } else {
+                if (countPoints == 1) {
+                    countPoints++;
+                } else {
+                    if (countPoints == 2) {
+                        finish = true;
+                        countPoints = 0;
+                    }
+                }
+            }
+            RealPoint p = sc.s2r(new ScreenPoint(x, y));
+            triangles.get(triangles.size() - 1).addPoint(p);
+            if (triangles.size() == 2 && (triangles.get(0).getList().size() == 3) && (triangles.get(1).getList().size() == 3)) {
+                figure.setPoints(TriangleDrawer.getSortedPoints(triangles.get(0), triangles.get(1)));
+            }
+            repaint();
+        }
     }
 
     @Override
@@ -93,9 +148,7 @@ public class DrawPanel extends JPanel implements MouseListener, MouseMotionListe
 
     @Override
     public void paint(Graphics g) {
-        BufferedImage bi = new BufferedImage(
-                getWidth(), getHeight(), BufferedImage.TYPE_3BYTE_BGR
-        );
+        BufferedImage bi = new BufferedImage(getWidth(), getHeight(), BufferedImage.TYPE_3BYTE_BGR);
         sc.setScreenW(getWidth());
         sc.setScreenH(getHeight());
         Graphics bi_g = bi.getGraphics();
@@ -104,21 +157,43 @@ public class DrawPanel extends JPanel implements MouseListener, MouseMotionListe
         bi_g.dispose();
         PixelDrawer pd = new BufferedImagePixelDrawer(bi);
         LineDrawer ld = new DDALineDrawer(pd);
-
-        drawLine(ld, xAxis);
-        drawLine(ld, yAxis);
-        //drawLine(ld, new Line(0, 0, 1, 1));
-        for(Line l : lines) {
-            drawLine(ld, l);
-        }
-        if(currentLine != null)
-            drawLine(ld, currentLine);
-
-        g.drawImage(bi, 0, 0 , null);
+        drawTriangle(ld);
+        g.drawImage(bi, 0, 0, null);
+        g.dispose();
     }
 
     private void drawLine(LineDrawer ld, Line l) {
-        ld.drawLine(sc.r2s(l.getP1()), sc.r2s(l.getP2()));
+        ld.drawLine(sc.r2s(l.getP1()), sc.r2s(l.getP2()), Color.BLACK);
+    }
+
+    private void drawCompletedTriangles(LineDrawer ld) {
+        int lines = 0;
+        int isComplete;
+        for (Triangle t : triangles) {
+            if (finish) {
+                isComplete = 0;
+            } else {
+                isComplete = 1;
+            }
+            if (lines != triangles.size() - isComplete) {
+                TriangleDrawer.drawFinal(sc, ld, t);
+            }
+            lines++;
+        }
+    }
+
+    private void drawLastTriangle(LineDrawer ld) {
+        if (triangles.size() > 0 && !finish) {
+            Triangle t = triangles.get(triangles.size() - 1);
+            TriangleDrawer.draw(sc, ld, t);
+            List<RealPoint> points = t.getList();
+            if (points.size() > 0) {
+                RealPoint p = points.get(points.size() - 1);
+                ScreenPoint sp = sc.r2s(p);
+                ScreenPoint sp2 = new ScreenPoint(x, y);
+                ld.drawLine(sp, sp2, Color.BLUE);
+            }
+        }
     }
 }
 
